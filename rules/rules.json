@@ -1,0 +1,22 @@
+{
+  "gem_bid_rules": [
+    {
+      "rule_id": "FIN_001",
+      "rule_name": "Minimum Annual Turnover Check",
+      "target_field": "annual_turnover_lakhs",
+      "condition": ">=",
+      "expected_value": 50.0,
+      "is_mandatory": true,
+      "error_message_template": "Vendor turnover is {extracted_value} Lakhs, but bid requires at least {expected_value} Lakhs."
+    },
+    {
+      "rule_id": "EXP_002",
+      "rule_name": "Minimum Past Experience",
+      "target_field": "years_of_experience",
+      "condition": ">=",
+      "expected_value": 3,
+      "is_mandatory": true,
+      "error_message_template": "Vendor experience is {extracted_value} years, required is {expected_value} years."
+    }
+  ]
+}
