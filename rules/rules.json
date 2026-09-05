@@ -16,7 +16,7 @@
       {
         "field": "business_name",
         "type": "cross_match",
-        "match_against": "PAN.business_name",
+        "match_against": "PAN.holder_name",
         "error": "Business name does not match PAN"
       }
     ]
@@ -49,4 +49,4 @@
     ]
   },
   "mandatory_documents": ["GST", "PAN", "MSME"]
-}
+}   
