@@ -82,10 +82,14 @@ if check_clicked and uploaded_files:
 
     valid_count = sum(1 for d in report["documents"] if d["status"] == "Valid")
     total_count = len(report["documents"])
-    st.metric("Documents checked", f"{valid_count} / {total_count} valid")
+    avg_confidence = sum(d.get("confidence", 1.0) for d in report["documents"] if d["status"] != "Missing") / \
+                      max(1, sum(1 for d in report["documents"] if d["status"] != "Missing"))
+
+    m1, m2 = st.columns(2)
+    m1.metric("Documents checked", f"{valid_count} / {total_count} valid")
+    m2.metric("Avg. extraction confidence", f"{int(avg_confidence * 100)}%")
 
     st.divider()
-
     # ---------- Per-document results ----------
     for doc in report["documents"]:
         status_icon = {
@@ -95,10 +99,27 @@ if check_clicked and uploaded_files:
             "Needs Review": "⚠️"
         }.get(doc["status"], "❔")
 
+        confidence = doc.get("confidence", 1.0)
+        confidence_pct = int(confidence * 100)
+
         with st.expander(
-            f"{status_icon} {doc['doc_type']} — {doc.get('file_name') or 'Not submitted'} ({doc['status']})",
+            f"{status_icon} {doc['doc_type']} — {doc.get('file_name') or 'Not submitted'} "
+            f"({doc['status']}, {confidence_pct}% confidence)",
             expanded=(doc["status"] != "Valid")
         ):
+            # Confidence bar
+            if doc["status"] != "Missing":
+                if confidence >= 0.8:
+                    st.progress(confidence, text=f"Extraction confidence: {confidence_pct}% — High")
+                elif confidence >= 0.5:
+                    st.progress(confidence, text=f"Extraction confidence: {confidence_pct}% — Medium")
+                else:
+                    st.progress(confidence, text=f"Extraction confidence: {confidence_pct}% — Low")
+                    st.warning(
+                        "⚠️ Low extraction confidence — this document may be blurry, scanned poorly, "
+                        "or in an unexpected format. Please verify manually before relying on this result."
+                    )
+
             if doc["status"] == "Missing":
                 st.error(doc["results"][0]["reason"])
             else:

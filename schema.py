@@ -21,6 +21,7 @@ class DocumentReport(TypedDict):
     doc_type: str
     file_name: str
     status: str                  # "Valid" | "Invalid" | "Missing" | "Needs Review"
+    confidence: float            # 0.0 to 1.0, carried from extraction
     results: List[RuleResult]
 
 class ComplianceReport(TypedDict):

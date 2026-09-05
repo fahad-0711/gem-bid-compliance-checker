@@ -57,20 +57,16 @@ def check_cross_match(value, other_doc_field_value) -> bool:
 
 
 def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = None) -> dict:
-    """
-    Validates one ExtractedDocument against its rules.
-    'all_documents' is a dict of {doc_type: ExtractedDocument} — needed for
-    cross_match rules that reference another document's fields.
-    Returns a DocumentReport dict.
-    """
     doc_type = extracted_doc["doc_type"]
     doc_rules = rules.get(doc_type)
+    confidence = extracted_doc.get("confidence", 1.0)
 
     if doc_rules is None:
         return {
             "doc_type": doc_type,
             "file_name": extracted_doc["file_name"],
             "status": "Needs Review",
+            "confidence": confidence,
             "results": [{"field": "doc_type", "passed": False,
                          "reason": f"Unrecognized document type: {doc_type}"}]
         }
@@ -78,7 +74,6 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
     results = []
     fields = extracted_doc.get("fields", {})
 
-    # Check required fields are present at all
     for req_field in doc_rules.get("required_fields", []):
         if fields.get(req_field) is None:
             results.append({
@@ -87,7 +82,6 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
                 "reason": f"Required field '{req_field}' could not be extracted"
             })
 
-    # Apply each rule
     for rule in doc_rules.get("rules", []):
         field = rule["field"]
         value = fields.get(field)
@@ -98,7 +92,6 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
         elif rule_type == "expiry_check":
             passed = check_expiry(value)
         elif rule_type == "cross_match":
-            # e.g. "PAN.business_name" -> look up PAN doc's business_name field
             target_doc_type, target_field = rule["match_against"].split(".")
             other_value = None
             if all_documents and target_doc_type in all_documents:
@@ -114,19 +107,18 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
         })
 
     overall_status = "Valid" if all(r["passed"] for r in results) else "Invalid"
-    if extracted_doc.get("confidence", 1.0) < 0.5:
+    if confidence < 0.5:
         overall_status = "Needs Review"
 
     return {
         "doc_type": doc_type,
         "file_name": extracted_doc["file_name"],
         "status": overall_status,
+        "confidence": confidence,
         "results": results
     }
 
-
 def check_missing_documents(found_doc_types: list, rules: dict) -> list:
-    """Returns a list of DocumentReport-style entries for any mandatory doc not found."""
     mandatory = rules.get("mandatory_documents", [])
     missing = []
     for doc_type in mandatory:
@@ -135,6 +127,7 @@ def check_missing_documents(found_doc_types: list, rules: dict) -> list:
                 "doc_type": doc_type,
                 "file_name": None,
                 "status": "Missing",
+                "confidence": 0.0,
                 "results": [{"field": "presence", "passed": False,
                              "reason": f"{doc_type} document was not submitted"}]
             })
