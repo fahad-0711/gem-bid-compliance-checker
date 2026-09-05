@@ -3,18 +3,22 @@ Streamlit UI for the GeM Bid Compliance Checker.
 Upload bid documents -> see extraction + rule validation results instantly.
 """
 
-import streamlit as st
 import sys
 import os
+
+# This MUST run before any local package imports (reports, extraction, rules)
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+import streamlit as st
 import tempfile
 import json
-
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from extraction.pdf_reader import extract_text_from_pdf, is_text_based_pdf
 from extraction.ocr_reader import extract_text_via_ocr
 from extraction.field_extractor import process_document
 from rules.rule_engine import load_rules, build_compliance_report
+from reports.pdf_export import generate_pdf_report
+from reports.excel_export import generate_excel_report
 
 st.set_page_config(page_title="GeM Bid Compliance Checker", page_icon="📋", layout="wide")
 
@@ -36,28 +40,35 @@ if check_clicked and uploaded_files:
         extracted_docs = []
 
         for uploaded_file in uploaded_files:
-            # Save to a temp file so our extraction functions (which expect a path) can read it
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(uploaded_file.read())
-                tmp_path = tmp.name
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(uploaded_file.read())
+                    tmp_path = tmp.name
 
-            if is_text_based_pdf(tmp_path):
-                text = extract_text_from_pdf(tmp_path)
-                confidence_note = None
-            else:
-                text, ocr_confidence = extract_text_via_ocr(tmp_path)
-                confidence_note = ocr_confidence
+                if is_text_based_pdf(tmp_path):
+                    text = extract_text_from_pdf(tmp_path)
+                    confidence_note = None
+                else:
+                    text, ocr_confidence = extract_text_via_ocr(tmp_path)
+                    confidence_note = ocr_confidence
 
-            doc = process_document(tmp_path, text)
-            doc["file_name"] = uploaded_file.name  # restore original name, not temp path
-            if confidence_note is not None:
-                doc["confidence"] = min(doc["confidence"], confidence_note)
+                doc = process_document(tmp_path, text)
+                doc["file_name"] = uploaded_file.name
+                if confidence_note is not None:
+                    doc["confidence"] = min(doc["confidence"], confidence_note)
 
-            extracted_docs.append(doc)
-            os.unlink(tmp_path)  # clean up temp file
+                extracted_docs.append(doc)
+                os.unlink(tmp_path)
+            except Exception:
+                st.warning(f"⚠️ Couldn't process {uploaded_file.name}: please re-upload a clear PDF.")
+                continue
 
         rules = load_rules(os.path.join(os.path.dirname(__file__), "..", "rules", "rules.json"))
-        report = build_compliance_report("BID-" + str(hash(tuple(f.name for f in uploaded_files)))[-6:], extracted_docs, rules)
+        report = build_compliance_report(
+            "BID-" + str(hash(tuple(f.name for f in uploaded_files)))[-6:],
+            extracted_docs,
+            rules
+        )
 
     # ---------- Summary ----------
     st.divider()
@@ -84,8 +95,10 @@ if check_clicked and uploaded_files:
             "Needs Review": "⚠️"
         }.get(doc["status"], "❔")
 
-        with st.expander(f"{status_icon} {doc['doc_type']} — {doc.get('file_name') or 'Not submitted'} ({doc['status']})",
-                          expanded=(doc["status"] != "Valid")):
+        with st.expander(
+            f"{status_icon} {doc['doc_type']} — {doc.get('file_name') or 'Not submitted'} ({doc['status']})",
+            expanded=(doc["status"] != "Valid")
+        ):
             if doc["status"] == "Missing":
                 st.error(doc["results"][0]["reason"])
             else:
@@ -97,13 +110,34 @@ if check_clicked and uploaded_files:
 
     # ---------- Download report ----------
     st.divider()
-    report_json = json.dumps(report, indent=2)
-    st.download_button(
-        "⬇️ Download report (JSON)",
-        data=report_json,
-        file_name="compliance_report.json",
-        mime="application/json"
-    )
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.download_button(
+            "⬇️ Download JSON",
+            data=json.dumps(report, indent=2),
+            file_name="compliance_report.json",
+            mime="application/json"
+        )
+
+    with col2:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
+            generate_pdf_report(report, tmp_pdf.name)
+            with open(tmp_pdf.name, "rb") as f:
+                st.download_button(
+                    "⬇️ Download PDF", data=f.read(),
+                    file_name="compliance_report.pdf", mime="application/pdf"
+                )
+
+    with col3:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_xlsx:
+            generate_excel_report(report, tmp_xlsx.name)
+            with open(tmp_xlsx.name, "rb") as f:
+                st.download_button(
+                    "⬇️ Download Excel", data=f.read(),
+                    file_name="compliance_report.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
 elif not uploaded_files:
     st.info("Upload one or more documents above, then click **Check Compliance**.")
