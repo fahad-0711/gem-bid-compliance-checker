@@ -1,7 +1,8 @@
 """
 Streamlit UI for the GeM Bid Compliance Checker.
 Upload bid documents -> see extraction + rule validation results instantly.
-Also tracks compliance history across checks for an Insights view.
+Also tracks compliance history across checks for an Insights view,
+and allows editing compliance rules without touching code.
 """
 
 import sys
@@ -18,6 +19,7 @@ from extraction.pdf_reader import extract_text_from_pdf, is_text_based_pdf
 from extraction.ocr_reader import extract_text_via_ocr
 from extraction.field_extractor import process_document
 from rules.rule_engine import load_rules, build_compliance_report
+from rules.rules_manager import read_rules_raw, validate_rules_json, save_rules, list_backups, restore_backup
 from reports.pdf_export import generate_pdf_report
 from reports.excel_export import generate_excel_report
 
@@ -30,7 +32,7 @@ if "report_history" not in st.session_state:
 st.title("📋 GeM Bid Compliance Checker")
 st.caption("Upload GST, PAN, and MSME certificates to instantly check compliance.")
 
-tab_check, tab_insights = st.tabs(["🔍 Check Compliance", "📊 Insights"])
+tab_check, tab_insights, tab_rules = st.tabs(["🔍 Check Compliance", "📊 Insights", "⚙️ Manage Rules"])
 
 # ============================================================
 # TAB 1: CHECK COMPLIANCE
@@ -234,3 +236,59 @@ with tab_insights:
         if st.button("🗑️ Clear session history"):
             st.session_state.report_history = []
             st.rerun()
+
+# ============================================================
+# TAB 3: MANAGE RULES
+# ============================================================
+with tab_rules:
+    st.subheader("⚙️ Compliance Rules Editor")
+    st.caption(
+        "Edit the validation rules below without touching any code. "
+        "Changes are validated before saving, and a backup of the previous "
+        "version is kept automatically."
+    )
+
+    current_rules = read_rules_raw()
+
+    edited_rules = st.text_area(
+        "rules.json content",
+        value=current_rules,
+        height=450,
+        help="Edit format checks, expiry rules, cross-document matches, or the "
+             "mandatory document list. Must remain valid JSON."
+    )
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        if st.button("✅ Validate"):
+            is_valid, message = validate_rules_json(edited_rules)
+            if is_valid:
+                st.success("Valid! This can be safely saved.")
+            else:
+                st.error(f"Invalid: {message}")
+
+    with col2:
+        if st.button("💾 Save Rules", type="primary"):
+            success, message = save_rules(edited_rules)
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(f"Not saved — {message}")
+
+    st.divider()
+
+    st.markdown("### 📦 Restore a previous version")
+    backups = list_backups()
+    if backups:
+        chosen_backup = st.selectbox("Available backups (most recent first)", backups)
+        if st.button("⏪ Restore this backup"):
+            success, message = restore_backup(chosen_backup)
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(message)
+    else:
+        st.write("No backups yet — one will be created automatically the first time you save a change.")

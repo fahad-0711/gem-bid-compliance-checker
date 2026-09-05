@@ -7,3 +7,4 @@ __pycache__/
 reports/*.pdf
 reports/*.xlsx
 *.ipynb_checkpoints
+rules/backups/
