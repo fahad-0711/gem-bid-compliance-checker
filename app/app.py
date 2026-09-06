@@ -44,6 +44,19 @@ with tab_check:
         accept_multiple_files=True
     )
 
+    # ---------- File size guard ----------
+    # Prevents unusually large PDFs (which can balloon into huge images during
+    # OCR conversion) from crashing the app on memory-constrained hosting.
+    MAX_FILE_SIZE_MB = 10
+    if uploaded_files:
+        oversized = [f.name for f in uploaded_files if f.size > MAX_FILE_SIZE_MB * 1024 * 1024]
+        if oversized:
+            st.error(
+                f"⚠️ These files exceed the {MAX_FILE_SIZE_MB}MB limit and were excluded: "
+                f"{', '.join(oversized)}. Please upload a smaller/compressed version."
+            )
+            uploaded_files = [f for f in uploaded_files if f.name not in oversized]
+
     check_clicked = st.button("🔍 Check Compliance", type="primary", disabled=not uploaded_files)
 
     if check_clicked and uploaded_files:
