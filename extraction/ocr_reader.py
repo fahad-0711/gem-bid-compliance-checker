@@ -5,11 +5,16 @@ Falls back path when pdf_reader.py finds no extractable text.
 
 import pytesseract
 from pdf2image import convert_from_path
+from PIL import Image
+
+Image.MAX_IMAGE_PIXELS = 150_000_000
 
 
-def extract_text_via_ocr(file_path: str, dpi: int = 300) -> tuple[str, float]:
+def extract_text_via_ocr(file_path: str, dpi: int = 150) -> tuple[str, float]:
     """
     Converts each page of a PDF to an image, then runs OCR on it.
+    Uses a moderate DPI (150) to balance OCR accuracy against memory
+    usage — important on memory-constrained hosting like Streamlit Cloud.
     Returns (extracted_text, average_confidence 0.0-1.0).
     """
     images = convert_from_path(file_path, dpi=dpi)
@@ -17,11 +22,16 @@ def extract_text_via_ocr(file_path: str, dpi: int = 300) -> tuple[str, float]:
     confidences = []
 
     for image in images:
+        max_dimension = 2500
+        if max(image.size) > max_dimension:
+            scale = max_dimension / max(image.size)
+            new_size = (int(image.width * scale), int(image.height * scale))
+            image = image.resize(new_size, Image.LANCZOS)
+
         data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
         page_text = pytesseract.image_to_string(image)
         all_text.append(page_text)
 
-        # Average confidence across detected words (ignore -1 = no detection)
         word_confidences = [int(c) for c in data["conf"] if int(c) > 0]
         if word_confidences:
             confidences.append(sum(word_confidences) / len(word_confidences))
