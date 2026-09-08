@@ -13,8 +13,15 @@ GSTIN_PATTERN = r"\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b"
 PAN_PATTERN = r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b"
 UDYAM_PATTERN = r"\bUDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
-
-
+def _normalize_for_id_matching(text: str) -> str:
+    """
+    Removes stray spaces that OCR sometimes inserts inside ID codes
+    (e.g. 'ALOPF38 60A' -> 'ALOPF3860A'), without affecting the rest
+    of the text used for other extraction.
+    """
+    # Collapse any whitespace between uppercase letters/digits that
+    # looks like it's splitting a single code (short runs only)
+    return re.sub(r'(?<=[A-Z0-9])\s+(?=[A-Z0-9])', '', text)
 def detect_doc_type(text: str) -> str:
     """Guess which document type this is, based on keywords in the text."""
     lower = text.lower()
@@ -36,7 +43,8 @@ def extract_fields(text: str, doc_type: str) -> dict:
     fields = {}
 
     if doc_type == "GST":
-        gstin_match = re.search(GSTIN_PATTERN, text)
+        normalized = _normalize_for_id_matching(text)
+        gstin_match = re.search(GSTIN_PATTERN, normalized)
         fields["gstin"] = gstin_match.group() if gstin_match else None
 
         name_match = re.search(r"Legal Name of Business\s*\n?\s*(.+)", text)
@@ -46,14 +54,13 @@ def extract_fields(text: str, doc_type: str) -> dict:
         fields["expiry_date"] = dates[-1] if dates else None  # last date = "valid until"
 
     elif doc_type == "PAN":
-        pan_match = re.search(PAN_PATTERN, text)
+        normalized = _normalize_for_id_matching(text)
+        pan_match = re.search(PAN_PATTERN, normalized)
         fields["pan_number"] = pan_match.group() if pan_match else None
 
-        name_match = re.search(r"Name\s*\n?\s*(.+)", text)
-        fields["holder_name"] = name_match.group(1).strip() if name_match else None
-
     elif doc_type == "MSME":
-        udyam_match = re.search(UDYAM_PATTERN, text)
+        normalized = _normalize_for_id_matching(text)
+        udyam_match = re.search(UDYAM_PATTERN, normalized)
         fields["udyam_number"] = udyam_match.group() if udyam_match else None
 
         category_match = re.search(r"Category\s*\n?\s*(\w+)", text)
