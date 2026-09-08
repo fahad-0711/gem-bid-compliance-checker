@@ -1,0 +1,14 @@
+[
+  {
+    "gstin": "27ABCPL1234F1Z5",
+    "business_name": "Bharat Enterprises Pvt Ltd",
+    "status": "Active",
+    "registered_date": "10-Jan-2020"
+  },
+  {
+    "gstin": "29XYZTR5678K1Z9",
+    "business_name": "Sunrise Traders Pvt Ltd",
+    "status": "Active",
+    "registered_date": "05-Jun-2019"
+  }
+]

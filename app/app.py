@@ -351,8 +351,13 @@ with tab_check:
                             st.error(
                                 f"**{result['field']}**: "
                                 f"{result['reason']}"
-                            )
-
+                        )
+                # ---------- Government record check ----------            
+                gov_check = doc.get("government_verification")
+                if gov_check:
+                    gov_icon = {"Verified": "🏛️✅", "Not Found": "🏛️❓",
+                                "Mismatch": "🏛️⚠️", "Not Checked": "🏛️➖"}.get(gov_check["status"], "🏛️")
+                    st.info(f"{gov_icon} **Government Record Check**: {gov_check['status']} — {gov_check['detail']}")
         # ====================================================
         # DOWNLOAD REPORTS
         # ====================================================

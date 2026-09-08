@@ -9,6 +9,7 @@ import re
 import os
 from datetime import datetime
 from rapidfuzz import fuzz
+from extraction.government_verifier import verify_against_government_records
 
 
 def load_rules(rules_path: str = "rules/rules.json") -> dict:
@@ -130,14 +131,17 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
     if confidence < 0.5:
         overall_status = "Needs Review"
 
+    government_check = verify_against_government_records(doc_type, fields)
+
+
     return {
         "doc_type": doc_type,
         "file_name": extracted_doc["file_name"],
         "status": overall_status,
         "confidence": confidence,
-        "results": results
+        "results": results,
+        "government_verification": government_check
     }
-
 
 def check_missing_documents(found_doc_types: list, rules: dict) -> list:
     mandatory = rules.get("mandatory_documents", [])

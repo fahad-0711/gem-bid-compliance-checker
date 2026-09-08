@@ -23,6 +23,7 @@ class DocumentReport(TypedDict):
     status: str                  # "Valid" | "Invalid" | "Missing" | "Needs Review"
     confidence: float            # 0.0 to 1.0, carried from extraction
     results: List[RuleResult]
+    government_verification: dict
 
 class ComplianceReport(TypedDict):
     bid_id: str
