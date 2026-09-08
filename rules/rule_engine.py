@@ -8,6 +8,7 @@ import json
 import re
 import os
 from datetime import datetime
+from rapidfuzz import fuzz
 
 
 def load_rules(rules_path: str = "rules/rules.json") -> dict:
@@ -40,20 +41,31 @@ def check_expiry(value) -> bool:
     return parsed >= datetime.now()
 
 
-def check_cross_match(value, other_doc_field_value) -> bool:
-    """
-    Loose match: compares names ignoring case, extra spaces, and common suffixes
-    like 'Pvt Ltd' / 'Private Limited' / 'Ltd'.
-    """
-    def normalize(name):
-        if not name:
-            return ""
-        name = name.lower().strip()
-        for suffix in ["pvt ltd", "private limited", "ltd", "llp", "inc"]:
-            name = name.replace(suffix, "")
-        return re.sub(r"\s+", " ", name).strip()
+def normalize_name(name: str) -> str:
+    """Strips common business suffixes and normalizes spacing/case for comparison."""
+    if not name:
+        return ""
+    name = name.lower().strip()
+    for suffix in ["pvt ltd", "private limited", "ltd", "llp", "inc", "limited"]:
+        name = name.replace(suffix, "")
+    return re.sub(r"\s+", " ", name).strip()
 
-    return normalize(value) == normalize(other_doc_field_value)
+
+def check_cross_match(value, other_doc_field_value, threshold: float = 85.0) -> tuple[bool, float]:
+    """
+    Fuzzy match: compares two business/holder names using similarity scoring
+    instead of exact string equality. Tolerates OCR noise, minor spelling
+    differences, and formatting inconsistencies between documents.
+    Returns (passed: bool, similarity_score: float 0-100).
+    """
+    norm_value = normalize_name(value)
+    norm_other = normalize_name(other_doc_field_value)
+
+    if not norm_value or not norm_other:
+        return False, 0.0
+
+    score = fuzz.token_sort_ratio(norm_value, norm_other)
+    return score >= threshold, round(score, 1)
 
 
 def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = None) -> dict:
@@ -68,7 +80,7 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
             "status": "Needs Review",
             "confidence": confidence,
             "results": [{"field": "doc_type", "passed": False,
-                         "reason": f"Unrecognized document type: {doc_type}"}]
+            "reason": f"Unrecognized document type: {doc_type}"}]
         }
 
     results = []
@@ -86,6 +98,7 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
         field = rule["field"]
         value = fields.get(field)
         rule_type = rule["type"]
+        similarity = None
 
         if rule_type == "regex":
             passed = check_regex(value, rule["pattern"])
@@ -96,14 +109,21 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
             other_value = None
             if all_documents and target_doc_type in all_documents:
                 other_value = all_documents[target_doc_type]["fields"].get(target_field)
-            passed = check_cross_match(value, other_value)
+            passed, similarity = check_cross_match(value, other_value)
         else:
             passed = False
+
+        reason = None
+        if not passed:
+            if rule_type == "cross_match":
+                reason = f"{rule['error']} (similarity: {similarity}%, threshold: 85%)"
+            else:
+                reason = rule["error"]
 
         results.append({
             "field": field,
             "passed": passed,
-            "reason": None if passed else rule["error"]
+            "reason": reason
         })
 
     overall_status = "Valid" if all(r["passed"] for r in results) else "Invalid"
@@ -118,6 +138,7 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
         "results": results
     }
 
+
 def check_missing_documents(found_doc_types: list, rules: dict) -> list:
     mandatory = rules.get("mandatory_documents", [])
     missing = []
@@ -129,7 +150,7 @@ def check_missing_documents(found_doc_types: list, rules: dict) -> list:
                 "status": "Missing",
                 "confidence": 0.0,
                 "results": [{"field": "presence", "passed": False,
-                             "reason": f"{doc_type} document was not submitted"}]
+                "reason": f"{doc_type} document was not submitted"}]
             })
     return missing
 
