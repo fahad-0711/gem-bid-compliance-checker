@@ -48,6 +48,9 @@ def extract_fields(text: str, doc_type: str) -> dict:
         pan_match = re.search(PAN_PATTERN, text)
         fields["pan_number"] = re.sub(r"\s+", "", pan_match.group()) if pan_match else None
 
+        name_match = re.search(r"Name\s*\n?\s*[:\-]?\s*(.+)", text)
+        fields["holder_name"] = name_match.group(1).strip() if name_match else None
+
     elif doc_type == "MSME":
         udyam_match = re.search(UDYAM_PATTERN, text)
         fields["udyam_number"] = udyam_match.group() if udyam_match else None
