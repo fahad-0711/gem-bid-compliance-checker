@@ -28,35 +28,62 @@ def _ocr_with_confidence(image: Image.Image) -> tuple[str, float]:
     return text.strip(), round(avg_confidence, 2)
 
 
+def _detect_rotation_via_osd(image: Image.Image) -> int | None:
+    """
+    Uses Tesseract's fast orientation-detection mode (not full OCR) to
+    estimate the clockwise rotation needed to make text upright.
+    Returns None if OSD couldn't produce an answer — common on sparse or
+    visually busy images (ID cards, watermarked scans, photos mixed with
+    text) — so the caller knows to fall back to the slower brute-force
+    method instead of trusting a wrong or missing correction.
+    """
+    try:
+        osd = pytesseract.image_to_osd(image, output_type=pytesseract.Output.DICT)
+        return osd.get("rotate", 0)
+    except pytesseract.TesseractError:
+        return None
+
+
 def _best_rotation_ocr(image: Image.Image) -> tuple[str, float]:
     """
-    Tries OCR at 0°/90°/180°/270° rotations, with and without contrast
-    preprocessing, and keeps whichever result has the best combination
-    of confidence and extracted text length. High confidence on very
-    little text is not preferred over slightly lower confidence with
-    substantially more recovered text.
+    Fast path: use Tesseract's OSD pass to correct rotation in one shot,
+    then OCR once. If that's confident, return immediately — this is the
+    common case (clean, text-dense documents) and takes ~2 OCR passes.
+
+    Fallback: if OSD fails outright, or its answer still yields
+    low-confidence OCR (this happens on busy/low-text documents like ID
+    cards, where OSD can misjudge or fail to detect orientation at all),
+    brute-force all four rotations with and without contrast enhancement,
+    same as the original approach, and keep the best result. This keeps
+    the slow path reserved for documents that actually need it, instead
+    of silently returning wrong-orientation text.
     """
     best_text, best_confidence, best_score = "", 0.0, -1.0
 
+    rotation = _detect_rotation_via_osd(image)
+    if rotation is not None:
+        candidate = image.rotate(-rotation, expand=True) if rotation != 0 else image
+        text, confidence = _ocr_with_confidence(candidate)
+        score = confidence * min(len(text), 200)
+        if score > best_score:
+            best_text, best_confidence, best_score = text, confidence, score
+
+        if confidence >= 0.6:
+            return best_text, best_confidence  # fast path succeeded, stop here
+
+    # Fallback: OSD failed or wasn't trustworthy — brute-force every
+    # rotation (and a contrast-enhanced variant of each), same scoring
+    # as before, so accuracy doesn't regress on harder documents.
     for angle in (0, 90, 180, 270):
         rotated = image.rotate(angle, expand=True) if angle != 0 else image
-
-        candidates = [
-            rotated,                       # original, no preprocessing
-            _preprocess_for_ocr(rotated),  # contrast-enhanced version
-        ]
-
-        for candidate in candidates:
+        for candidate in (rotated, _preprocess_for_ocr(rotated)):
             text, confidence = _ocr_with_confidence(candidate)
-            # Score rewards both confidence and amount of text recovered,
-            # so a high-confidence-but-nearly-empty result doesn't win
-            # over a slightly-lower-confidence result with real content.
             score = confidence * min(len(text), 200)
-
             if score > best_score:
                 best_text, best_confidence, best_score = text, confidence, score
 
     return best_text, best_confidence
+
 
 def extract_text_via_ocr(file_path: str, dpi: int = 150) -> tuple[str, float]:
     """
@@ -80,11 +107,14 @@ def extract_text_via_ocr(file_path: str, dpi: int = 150) -> tuple[str, float]:
     full_text = "\n".join(all_text).strip()
     avg_confidence = (sum(confidences) / len(confidences)) if confidences else 0.0
     return full_text, round(avg_confidence, 2)
+
+
 def _preprocess_for_ocr(image: Image.Image) -> Image.Image:
     """Grayscale + contrast boost — often improves OCR on busy/colored backgrounds."""
     gray = image.convert("L")
     enhancer = ImageEnhance.Contrast(gray)
     return enhancer.enhance(2.0)
+
 
 def extract_text_from_image(file_path: str) -> tuple[str, float]:
     """
@@ -98,7 +128,7 @@ def extract_text_from_image(file_path: str) -> tuple[str, float]:
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    image = _resize_if_needed(image)
+    image = _resize_if_needed(image, max_dimension=2000)  # was 2500
     text, confidence = _best_rotation_ocr(image)
     return text, confidence
 
