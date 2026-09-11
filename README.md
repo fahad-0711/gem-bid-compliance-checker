@@ -39,3 +39,11 @@ different compliance outcomes.
 
 ## Team
 - [Your name] — Extraction, Rules, Integration, UI
+
+## Government Record Verification (Simulated)
+This feature demonstrates how document verification against official
+government databases would work. Since real GST/PAN/MSME government APIs
+require official access and involve confidential data, we simulate this
+using a small set of sample records we created ourselves — no real
+government or personal data is used. In production, this module would
+be replaced with live calls to GeM/Income Tax/Udyam verification APIs.
