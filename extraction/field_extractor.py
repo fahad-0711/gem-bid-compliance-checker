@@ -53,26 +53,25 @@ def _clean_name_noise(name: str) -> str:
     return name.strip()
 
 
-def _extract_name_after_label(text: str, label_pattern: str) -> str | None:
+def _extract_name_after_label(text, label_pattern, exclude_terms=("father", "पिता", "husband", "पति")):
     """
-    Finds a label (e.g. 'Name') and tries to pull the actual name value
-    from either the same line or the line right after it. Real-world OCR
-    text sometimes puts stray noise on the label's own line (e.g. a
-    misread watermark character), with the actual name only appearing on
-    the next line — this checks both and picks whichever looks like a
-    real name.
+    Return the value following the first label match whose own line
+    does NOT also reference an excluded relation (father's/husband's name).
     """
-    match = re.search(label_pattern + r"\s*[:\-]?\s*(.*)\n?(.*)", text, re.IGNORECASE)
-    if not match:
-        return None
+    for match in re.finditer(label_pattern, text, re.IGNORECASE):
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        line_end = text.find("\n", match.end())
+        line_end = line_end if line_end != -1 else len(text)
+        line = text[line_start:line_end]
 
-    same_line = match.group(1).strip()
-    next_line = match.group(2).strip()
+        if any(term in line.lower() for term in exclude_terms):
+            continue  # this is "Father's Name" / "Husband's Name", not the holder's
 
-    if _looks_like_a_name(same_line):
-        return _clean_name_noise(same_line)
-    if _looks_like_a_name(next_line):
-        return _clean_name_noise(next_line)
+        rest = text[match.end():]
+        value_match = re.search(r"\n?\s*(.+)", rest)
+        if value_match:
+            return value_match.group(1).strip()
+
     return None
 
 def extract_fields(text: str, doc_type: str) -> dict:

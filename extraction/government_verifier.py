@@ -79,7 +79,7 @@ def verify_against_government_records(doc_type: str, fields: dict) -> dict:
                         "verified": False,
                         "status": "Mismatch",
                         "detail": f"{id_field.upper()} found in records, but name doesn't match "
-                                  f"(record shows '{record_name}')"
+                                 f"(record shows '{record_name}')"
                     }
             return {
                 "verified": True,

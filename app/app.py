@@ -366,11 +366,17 @@ with tab_check:
                                 f"**{result['field']}**: "
                                 f"{result['reason']}"
                         )
-                # ---------- Government record check ----------            
+                # ---------- Government record check ----------
+                # "Mismatch" is already surfaced as a failed row in the
+                # results list above (rules/rule_engine.py adds it there),
+                # so showing it again here would just be a duplicate.
+                # The other outcomes (Verified / Not Found / Not Checked)
+                # aren't in results, so this box is still the only place
+                # they're shown.
                 gov_check = doc.get("government_verification")
-                if gov_check:
+                if gov_check and gov_check["status"] != "Mismatch":
                     gov_icon = {"Verified": "🏛️✅", "Not Found": "🏛️❓",
-                                "Mismatch": "🏛️⚠️", "Not Checked": "🏛️➖"}.get(gov_check["status"], "🏛️")
+                                "Not Checked": "🏛️➖"}.get(gov_check["status"], "🏛️")
                     st.info(f"{gov_icon} **Government Record Check**: {gov_check['status']} — {gov_check['detail']}")
         # ====================================================
         # DOWNLOAD REPORTS
