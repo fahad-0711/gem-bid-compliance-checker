@@ -69,6 +69,19 @@ def check_cross_match(value, other_doc_field_value, threshold: float = 85.0) -> 
     return score >= threshold, round(score, 1)
 
 
+# Status precedence used when combining the rule-based status with the
+# government-verification outcome. Higher index = more severe, and the
+# combined status never moves to a less severe state than either input.
+_STATUS_SEVERITY = ["Valid", "Needs Review", "Invalid"]
+
+
+def _more_severe(a: str, b: str) -> str:
+    """Returns whichever of two statuses is more severe, per _STATUS_SEVERITY."""
+    a_rank = _STATUS_SEVERITY.index(a) if a in _STATUS_SEVERITY else 0
+    b_rank = _STATUS_SEVERITY.index(b) if b in _STATUS_SEVERITY else 0
+    return a if a_rank >= b_rank else b
+
+
 def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = None) -> dict:
     doc_type = extracted_doc["doc_type"]
     doc_rules = rules.get(doc_type)
@@ -129,10 +142,26 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
 
     overall_status = "Valid" if all(r["passed"] for r in results) else "Invalid"
     if confidence < 0.5:
-        overall_status = "Needs Review"
+        overall_status = _more_severe(overall_status, "Needs Review")
 
     government_check = verify_against_government_records(doc_type, fields)
 
+    # A government-record mismatch is a hard compliance failure — the ID
+    # number was found in the registry, but under a different name. A
+    # "Not Found" is treated more leniently (flagged for manual review,
+    # not an automatic fail), since it doesn't prove the document is
+    # invalid, only that the mock registry has no matching record.
+    # Either way, this can only make the status MORE severe than the
+    # field-rule result, never override an Invalid back down to Valid.
+    if government_check["status"] == "Mismatch":
+        overall_status = _more_severe(overall_status, "Invalid")
+        results.append({
+            "field": "government_record_match",
+            "passed": False,
+            "reason": government_check["detail"]
+        })
+    elif government_check["status"] == "Not Found":
+        overall_status = _more_severe(overall_status, "Needs Review")
 
     return {
         "doc_type": doc_type,
