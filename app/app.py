@@ -60,16 +60,7 @@ tab_check, tab_insights, tab_rules = st.tabs(
 
 with tab_check:
 
-    uploaded_files = st.file_uploader(
-        "Upload bid documents (PDF, DOCX, or image)",
-        type=["pdf", "docx", "jpg", "jpeg", "png"],
-        accept_multiple_files=True,
-    )
-
-    # ---------- File size guard ----------
-    MAX_FILE_SIZE_MB = 10
-
-        # ---------- Uploader reset mechanism ----------
+    # ---------- Uploader reset mechanism ----------
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
 
