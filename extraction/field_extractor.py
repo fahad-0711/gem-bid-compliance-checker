@@ -14,6 +14,7 @@ PAN_PATTERN = r"\b[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\b"
 UDYAM_PATTERN = r"\bUDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
 
+
 def detect_doc_type(text: str) -> str:
     """Guess which document type this is, based on keywords in the text."""
     lower = text.lower()
@@ -21,7 +22,9 @@ def detect_doc_type(text: str) -> str:
         return "MSME"
     if "goods and services tax" in lower or "gstin" in lower:
         return "GST"
-    if "permanent account number" in lower or re.search(PAN_PATTERN, text):
+    if ("permanent account number" in lower
+            or "income tax department" in lower
+            or re.search(PAN_PATTERN, text)):
         return "PAN"
     return "UNKNOWN"
 
@@ -30,6 +33,48 @@ def extract_dates(text: str) -> list[str]:
     return re.findall(DATE_PATTERN, text)
 
 
+def _looks_like_a_name(s: str) -> bool:
+    """
+    Quick sanity check: does this string look like a real name, or is it
+    likely OCR noise (stray characters, a single short garbled token)?
+    Requires at least 4 characters and a run of 3+ letters somewhere.
+    """
+    return len(s) >= 4 and bool(re.search(r"[A-Za-z]{3,}", s))
+
+def _clean_name_noise(name: str) -> str:
+    """
+    Light cleanup for common OCR artifacts in extracted names: trailing
+    short noise tokens (1-2 lowercase letters stuck on the end) and stray
+    punctuation. This doesn't guarantee a perfect name, but removes the
+    most common junk without risking over-correction.
+    """
+    name = re.sub(r"\s+[a-z]{1,3}$", "", name)
+    name = name.replace("!", "I")
+    return name.strip()
+
+
+def _extract_name_after_label(text: str, label_pattern: str) -> str | None:
+    """
+    Finds a label (e.g. 'Name') and tries to pull the actual name value
+    from either the same line or the line right after it. Real-world OCR
+    text sometimes puts stray noise on the label's own line (e.g. a
+    misread watermark character), with the actual name only appearing on
+    the next line — this checks both and picks whichever looks like a
+    real name.
+    """
+    match = re.search(label_pattern + r"\s*[:\-]?\s*(.*)\n?(.*)", text, re.IGNORECASE)
+    if not match:
+        return None
+
+    same_line = match.group(1).strip()
+    next_line = match.group(2).strip()
+
+    if _looks_like_a_name(same_line):
+        return _clean_name_noise(same_line)
+    if _looks_like_a_name(next_line):
+        return _clean_name_noise(next_line)
+    return None
+
 def extract_fields(text: str, doc_type: str) -> dict:
     """Pulls out the fields relevant to a given document type."""
     fields = {}
@@ -37,7 +82,7 @@ def extract_fields(text: str, doc_type: str) -> dict:
     if doc_type == "GST":
         gstin_match = re.search(GSTIN_PATTERN, text)
         fields["gstin"] = re.sub(r"\s+", "", gstin_match.group()) if gstin_match else None
-    
+
         name_match = re.search(r"Legal Name of Business\s*\n?\s*(.+)", text)
         fields["business_name"] = name_match.group(1).strip() if name_match else None
 
@@ -48,8 +93,7 @@ def extract_fields(text: str, doc_type: str) -> dict:
         pan_match = re.search(PAN_PATTERN, text)
         fields["pan_number"] = re.sub(r"\s+", "", pan_match.group()) if pan_match else None
 
-        name_match = re.search(r"Name\s*\n?\s*[:\-]?\s*(.+)", text)
-        fields["holder_name"] = name_match.group(1).strip() if name_match else None
+        fields["holder_name"] = _extract_name_after_label(text, r"Name")
 
     elif doc_type == "MSME":
         udyam_match = re.search(UDYAM_PATTERN, text)
