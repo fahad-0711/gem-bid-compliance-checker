@@ -69,6 +69,30 @@ with tab_check:
     # ---------- File size guard ----------
     MAX_FILE_SIZE_MB = 10
 
+        # ---------- Uploader reset mechanism ----------
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
+
+    upload_col, clear_col = st.columns([5, 1])
+
+    with upload_col:
+        uploaded_files = st.file_uploader(
+            "Upload bid documents (PDF, DOCX, or image)",
+            type=["pdf", "docx", "jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+            key=f"uploader_{st.session_state.uploader_key}",
+        )
+
+    with clear_col:
+        st.write("")
+        st.write("")
+        if st.button("🗑️ Clear all"):
+            st.session_state.uploader_key += 1
+            st.rerun()
+
+    # ---------- File size guard ----------
+    MAX_FILE_SIZE_MB = 10
+
     if uploaded_files:
         oversized = [
             f.name
@@ -93,7 +117,6 @@ with tab_check:
         type="primary",
         disabled=not uploaded_files,
     )
-
     if check_clicked and uploaded_files:
 
         with st.spinner("Processing documents..."):
