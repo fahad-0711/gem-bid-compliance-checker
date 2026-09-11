@@ -47,3 +47,11 @@ require official access and involve confidential data, we simulate this
 using a small set of sample records we created ourselves — no real
 government or personal data is used. In production, this module would
 be replaced with live calls to GeM/Income Tax/Udyam verification APIs.
+
+
+
+## Known temporary limitation
+GST is currently NOT included in mandatory document checks, pending
+real-world GST certificate images for testing. PAN and MSME verification
+are fully functional. Re-enable GST by adding it back to
+`mandatory_documents` in `rules/rules.json` once test images are available.

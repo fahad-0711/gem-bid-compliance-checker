@@ -32,21 +32,16 @@
       }
     ]
   },
-  "MSME": {
-    "required_fields": ["udyam_number", "category", "expiry_date"],
-    "rules": [
-      {
-        "field": "udyam_number",
-        "type": "regex",
-        "pattern": "^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$",
-        "error": "Invalid Udyam registration format"
-      },
-      {
-        "field": "expiry_date",
-        "type": "expiry_check",
-        "error": "MSME certificate has expired"
-      }
-    ]
-  },
-  "mandatory_documents": ["GST", "PAN", "MSME"]
+ "MSME": {
+  "required_fields": ["udyam_number"],
+  "rules": [
+    {
+      "field": "udyam_number",
+      "type": "regex",
+      "pattern": "^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$",
+      "error": "Invalid Udyam registration format"
+    }
+  ]
+},
+  "mandatory_documents": ["PAN", "MSME"]
 }   
