@@ -11,7 +11,7 @@ from datetime import datetime
 # Regex patterns for each field type
 GSTIN_PATTERN = r"\b[0-9]{2}\s?[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\s?[1-9A-Z]{1}\s?Z\s?[0-9A-Z]{1}\b"
 PAN_PATTERN = r"\b[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\b"
-UDYAM_PATTERN = r"\bUDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}\b"
+UDYAM_PATTERN = r"\bUDYAM[-.]?[A-Z]{2}[-.]?[0-9]{2}[-.]?[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
 
 
@@ -97,12 +97,19 @@ def extract_fields(text: str, doc_type: str) -> dict:
 
     elif doc_type == "MSME":
         udyam_match = re.search(UDYAM_PATTERN, text)
-        fields["udyam_number"] = udyam_match.group() if udyam_match else None
-        category_match = re.search(r"Category\s*\n?\s*(\w+)", text)
-        fields["category"] = category_match.group(1).strip() if category_match else None
-
-        dates = extract_dates(text)
-        fields["expiry_date"] = dates[-1] if dates else None
+        if udyam_match:
+            raw = udyam_match.group()
+            # Normalize OCR punctuation confusion (., missing separators)
+            # back into the canonical UDYAM-XX-00-0000000 format
+            digits_letters = re.sub(r"[^A-Z0-9]", "", raw)  # strip all separators
+            if digits_letters.startswith("UDYAM") and len(digits_letters) == 16:
+                fields["udyam_number"] = (
+                    f"UDYAM-{digits_letters[5:7]}-{digits_letters[7:9]}-{digits_letters[9:]}"
+                )
+            else:
+                fields["udyam_number"] = raw
+        else:
+            fields["udyam_number"] = None
 
     return fields
 
