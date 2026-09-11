@@ -20,9 +20,18 @@ def _resize_if_needed(image: Image.Image, max_dimension: int = 2500) -> Image.Im
 
 
 def _ocr_with_confidence(image: Image.Image) -> tuple[str, float]:
-    """Runs OCR on a single image and returns (text, avg_confidence 0-1)."""
+    """
+    Runs OCR on a single image and returns (text, avg_confidence 0-1).
+
+    Previously this called both image_to_data() and image_to_string(),
+    which runs Tesseract TWICE for the same image (each call is a full
+    OCR pass). image_to_data() already contains every recognized word,
+    so we reconstruct the text from it instead of OCR'ing a second time.
+    This alone halves OCR work everywhere this function is used.
+    """
     data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-    text = pytesseract.image_to_string(image)
+    words = [w for w in data["text"] if w.strip()]
+    text = " ".join(words)
     word_confidences = [int(c) for c in data["conf"] if int(c) > 0]
     avg_confidence = (sum(word_confidences) / len(word_confidences) / 100) if word_confidences else 0.0
     return text.strip(), round(avg_confidence, 2)
@@ -74,12 +83,11 @@ def _best_rotation_ocr(image: Image.Image) -> tuple[str, float]:
     and takes ~1-2 OCR passes.
 
     Fallback: if OSD fails outright, confidence is low, or no ID number
-    pattern was found (the field we care about most), brute-force all
-    four rotations with and without contrast enhancement, and keep
-    whichever result actually contains an ID number — falling back to
-    the highest-scoring result if none do. This keeps the slow path
-    reserved for documents that actually need it, instead of silently
-    returning wrong-orientation or incomplete text.
+    pattern was found (the field we care about most), try each rotation
+    in turn and stop as soon as one produces a confident ID-number match
+    — instead of always running every rotation/variant combination to
+    completion. If nothing confident turns up, fall back to whichever
+    candidate scored highest.
     """
     best_text, best_confidence, best_score = "", 0.0, -1.0
 
@@ -95,15 +103,17 @@ def _best_rotation_ocr(image: Image.Image) -> tuple[str, float]:
             return best_text, best_confidence  # fast path succeeded, stop here
 
     # Fallback: OSD failed, wasn't trustworthy, or didn't find an ID
-    # number — brute-force every rotation (and a contrast-enhanced
-    # variant of each), preferring any result that actually contains
-    # an ID number pattern over one that merely scores higher.
+    # number. Try plain rotations first (cheap), then only reach for
+    # the contrast-enhanced variant of a given angle if the plain one
+    # didn't find an ID number — and stop the whole search the moment
+    # any candidate produces a confident ID-number match, rather than
+    # always exhausting every rotation/variant combination.
     for angle in (0, 90, 180, 270):
         rotated = image.rotate(angle, expand=True) if angle != 0 else image
+
         for candidate in (rotated, _preprocess_for_ocr(rotated)):
             text, confidence = _ocr_with_confidence(candidate)
             score = confidence * min(len(text), 200)
-
             candidate_has_id = _looks_like_it_has_an_id_number(text)
             best_has_id = _looks_like_it_has_an_id_number(best_text)
 
@@ -111,6 +121,15 @@ def _best_rotation_ocr(image: Image.Image) -> tuple[str, float]:
                 best_text, best_confidence, best_score = text, confidence, score
             elif candidate_has_id == best_has_id and score > best_score:
                 best_text, best_confidence, best_score = text, confidence, score
+
+            if candidate_has_id and confidence >= 0.5:
+                return best_text, best_confidence  # good enough — stop searching
+
+            # Plain rotation already found an ID number but confidence
+            # was low — the contrast-enhanced variant rarely helps once
+            # the pattern is already there, so skip it and move on.
+            if candidate is rotated and candidate_has_id:
+                break
 
     return best_text, best_confidence
 
