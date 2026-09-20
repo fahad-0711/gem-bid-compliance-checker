@@ -14,6 +14,23 @@ PAN_PATTERN = r"\b[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\b"
 UDYAM_PATTERN = r"\bUDYAM[-.]?[A-Z]{2}[-.]?[0-9]{2}[-.]?[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
 
+# Words that should never be treated as part of a person's name, even if
+# they happen to be capitalized cleanly by OCR (e.g. "Date", "Signature").
+# Acts as a safety net alongside the Title-Case shape check below.
+_NAME_STOPWORDS = {
+    "date", "birth", "signature", "permanent", "account", "number",
+    "card", "government", "govt", "india", "income", "tax", "department",
+    "name", "sample", "valid", "not", "father's", "fathers",
+    "husband's", "husbands",
+}
+
+# A real name word (in this pipeline's OCR output) looks like "Rohit" or
+# "Kumar" -- one capital letter followed by lowercase letters, nothing
+# else. Garbled OCR noise ("fare", "aTtha", "FeaTeR") reliably fails this
+# pattern, which is what lets us stop capturing a name WITHOUT a line
+# break to anchor on.
+_TITLE_CASE_WORD = re.compile(r"^[A-Z][a-z]+$")
+
 
 def detect_doc_type(text: str) -> str:
     """Guess which document type this is, based on keywords in the text."""
@@ -53,24 +70,64 @@ def _clean_name_noise(name: str) -> str:
     return name.strip()
 
 
-def _extract_name_after_label(text, label_pattern, exclude_terms=("father", "पिता", "husband", "पति")):
+def _extract_name_after_label(text, label_pattern, exclude_terms=("father", "पिता", "husband", "पति"), max_words=5):
     """
-    Return the value following the first label match whose own line
-    does NOT also reference an excluded relation (father's/husband's name).
-    """
-    for match in re.finditer(label_pattern, text, re.IGNORECASE):
-        line_start = text.rfind("\n", 0, match.start()) + 1
-        line_end = text.find("\n", match.end())
-        line_end = line_end if line_end != -1 else len(text)
-        line = text[line_start:line_end]
+    Return the value following the first label match whose immediate
+    local context does NOT also reference an excluded relation
+    (father's/husband's name).
 
-        if any(term in line.lower() for term in exclude_terms):
+    This works whether or not `text` contains real newlines. OCR output
+    from ocr_reader.py's _ocr_with_confidence is a single space-joined
+    string with NO line breaks at all (every recognized word is joined
+    with " "). Text-based PDFs, by contrast, may still have real
+    newlines. The previous version of this function located "the current
+    line" via text.rfind("\n", ...) / text.find("\n", ...); when no
+    newline exists, both calls return -1, which silently expanded "the
+    current line" to the ENTIRE document -- so the exclude-term check
+    ended up seeing every word in the whole text (including a later,
+    unrelated "Father's Name" section), and excluded EVERY match of
+    "Name", including the correct one.
+
+    Both the exclusion check and the value boundary below are therefore
+    based on a small fixed-size local window and word-shape heuristics
+    instead of "\n", so they behave the same way regardless of whether
+    the input text has line breaks or not.
+    """
+    CONTEXT_WINDOW = 40  # characters of local context to inspect, not the whole doc
+
+    for match in re.finditer(label_pattern, text, re.IGNORECASE):
+        nearest_newline = text.rfind("\n", 0, match.start())
+        context_start = max(nearest_newline + 1, match.start() - CONTEXT_WINDOW, 0)
+        local_context = text[context_start:match.start()]
+
+        if any(term in local_context.lower() for term in exclude_terms):
             continue  # this is "Father's Name" / "Husband's Name", not the holder's
 
-        rest = text[match.end():]
-        value_match = re.search(r"\n?\s*(.+)", rest)
-        if value_match:
-            return value_match.group(1).strip()
+        # Walk forward from the label, word by word, collecting only
+        # tokens that look like real name components and stopping at the
+        # first word that doesn't -- this replaces relying on a newline
+        # to know where the name ends, and also stops naturally before
+        # hitting the NEXT label if that label survives OCR intact.
+        rest_words = text[match.end():].split()
+        collected = []
+        for word in rest_words[:max_words]:
+            stripped = re.sub(r"^\W+|\W+$", "", word)
+            if not stripped:
+                continue
+            if stripped.lower() in exclude_terms or stripped.lower() in _NAME_STOPWORDS:
+                break
+            if not _TITLE_CASE_WORD.match(stripped):
+                break
+            collected.append(stripped)
+
+        if not collected:
+            continue
+
+        candidate = _clean_name_noise(" ".join(collected))
+        if _looks_like_a_name(candidate):
+            return candidate
+        # otherwise this match produced junk -- keep checking other
+        # occurrences of the label rather than returning garbage
 
     return None
 
