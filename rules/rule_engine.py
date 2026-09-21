@@ -117,7 +117,12 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
         if rule_type == "regex":
             passed = check_regex(value, rule["pattern"])
         elif rule_type == "expiry_check":
-            passed = check_expiry(value)
+            if value is None:
+                # No expiry date extracted — likely indefinite validity
+                # (common on real certificates), not a failure.
+                passed = True
+            else:
+                passed = check_expiry(value)
         elif rule_type == "cross_match":
             target_doc_type, target_field = rule["match_against"].split(".")
             other_value = None
@@ -171,6 +176,7 @@ def validate_document(extracted_doc: dict, rules: dict, all_documents: dict = No
         "results": results,
         "government_verification": government_check
     }
+
 
 def check_missing_documents(found_doc_types: list, rules: dict) -> list:
     mandatory = rules.get("mandatory_documents", [])

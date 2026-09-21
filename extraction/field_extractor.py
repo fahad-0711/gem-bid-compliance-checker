@@ -13,6 +13,8 @@ GSTIN_PATTERN = r"\b[0-9]{2}\s?[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\s?[1-9A-Z]{1}\s?Z\
 PAN_PATTERN = r"\b[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\b"
 UDYAM_PATTERN = r"\bUDYAM[-.\s]*[A-Z]{2}[-.\s]*[0-9]{2}[-.\s]*[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
+TURNOVER_CERT_PATTERN = r"\bDEMO-TURN-\d{4}\b"
+COMPANY_REG_PATTERN = r"\bSAMPLE-COMP-\d{3}\b"
 
 # Words that should never be treated as part of a person's name, even if
 # they happen to be capitalized cleanly by OCR (e.g. "Date", "Signature").
@@ -35,10 +37,14 @@ _TITLE_CASE_WORD = re.compile(r"^[A-Z][a-z]+$")
 def detect_doc_type(text: str) -> str:
     """Guess which document type this is, based on keywords in the text."""
     lower = text.lower()
-    if "udyam" in lower or "msme" in lower:
-        return "MSME"
-    if "goods and services tax" in lower or "gstin" in lower:
+    if "turnover certificate" in lower or re.search(TURNOVER_CERT_PATTERN, text):
+        return "TURNOVER"
+    if "company registration certificate" in lower or re.search(COMPANY_REG_PATTERN, text):
+        return "COMPANY_REG"
+    if "goods and services tax" in lower or "gstin" in lower or "gst registration" in lower:
         return "GST"
+    if "udyam registration" in lower or "udyam registration certificate" in lower:
+        return "MSME"
     if ("permanent account number" in lower
             or "income tax department" in lower
             or re.search(PAN_PATTERN, text)):
@@ -139,17 +145,43 @@ def extract_fields(text: str, doc_type: str) -> dict:
         gstin_match = re.search(GSTIN_PATTERN, text)
         fields["gstin"] = re.sub(r"\s+", "", gstin_match.group()) if gstin_match else None
 
-        name_match = re.search(r"Legal Name of Business\s*\n?\s*(.+)", text)
+        # Real certificates use "Legal Name" (sometimes numbered "2. Legal Name"),
+        # our own dummy PDFs use "Legal Name of Business" — match either.
+        name_match = re.search(r"Legal Name(?:\s+of\s+Business)?\s*:?\s*(.+)", text, re.IGNORECASE)
         fields["business_name"] = name_match.group(1).strip() if name_match else None
 
-        dates = extract_dates(text)
-        fields["expiry_date"] = dates[-1] if dates else None  # last date = "valid until"
+        # Real certificates often say "Period of Validity From <date> to Regular"
+        # meaning indefinite validity, not a fixed expiry date. Only treat it as
+        # an expiry date if the text after "to" actually looks like a date.
+        validity_match = re.search(
+            r"Period of Validity\s+From\s+" + DATE_PATTERN + r"\s+to\s+(" + DATE_PATTERN + r")",
+            text
+        )
+        if validity_match:
+            fields["expiry_date"] = validity_match.group(1)
+        else:
+            # No fixed end date found (e.g. "to Regular" = indefinite) —
+            # don't treat the start date as an expiry date.
+            fields["expiry_date"] = None
 
     elif doc_type == "PAN":
         pan_match = re.search(PAN_PATTERN, text)
         fields["pan_number"] = re.sub(r"\s+", "", pan_match.group()) if pan_match else None
 
         fields["holder_name"] = _extract_name_after_label(text, r"Name")
+    elif doc_type == "TURNOVER":
+        cert_match = re.search(TURNOVER_CERT_PATTERN, text)
+        fields["certificate_number"] = cert_match.group() if cert_match else None
+
+        name_match = re.search(r"Enterprise Name\s*:?\s*(.+)", text)
+        fields["enterprise_name"] = name_match.group(1).strip() if name_match else None
+
+    elif doc_type == "COMPANY_REG":
+        reg_match = re.search(COMPANY_REG_PATTERN, text)
+        fields["registration_number"] = reg_match.group() if reg_match else None
+
+        name_match = re.search(r"Company Name\s*:?\s*(.+)", text)
+        fields["company_name"] = name_match.group(1).strip() if name_match else None
 
     elif doc_type == "MSME":
         udyam_match = re.search(UDYAM_PATTERN, text)
@@ -164,6 +196,7 @@ def extract_fields(text: str, doc_type: str) -> dict:
                 fields["udyam_number"] = raw
         else:
             fields["udyam_number"] = None
+        
 
     return fields
 

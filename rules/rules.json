@@ -1,6 +1,9 @@
 {
   "GST": {
-    "required_fields": ["gstin", "business_name", "expiry_date"],
+    "required_fields": [
+      "gstin",
+      "business_name"
+    ],
     "rules": [
       {
         "field": "gstin",
@@ -21,8 +24,12 @@
       }
     ]
   },
+
   "PAN": {
-    "required_fields": ["pan_number", "holder_name"],
+    "required_fields": [
+      "pan_number",
+      "holder_name"
+    ],
     "rules": [
       {
         "field": "pan_number",
@@ -32,16 +39,56 @@
       }
     ]
   },
- "MSME": {
-  "required_fields": ["udyam_number"],
-  "rules": [
-    {
-      "field": "udyam_number",
-      "type": "regex",
-      "pattern": "^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$",
-      "error": "Invalid Udyam registration format"
-    }
+
+  "MSME": {
+    "required_fields": [
+      "udyam_number"
+    ],
+    "rules": [
+      {
+        "field": "udyam_number",
+        "type": "regex",
+        "pattern": "^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$",
+        "error": "Invalid Udyam registration format"
+      }
+    ]
+  },
+
+  "TURNOVER": {
+    "required_fields": [
+      "certificate_number",
+      "enterprise_name"
+    ],
+    "rules": [
+      {
+        "field": "certificate_number",
+        "type": "regex",
+        "pattern": "^DEMO-TURN-[0-9]{4}$",
+        "error": "Invalid turnover certificate number format"
+      }
+    ]
+  },
+
+  "COMPANY_REG": {
+    "required_fields": [
+      "registration_number",
+      "company_name"
+    ],
+    "rules": [
+      {
+        "field": "registration_number",
+        "type": "regex",
+        "pattern": "^SAMPLE-COMP-[0-9]{3}$",
+        "error": "Invalid company registration number format"
+      }
+    ]
+  },
+
+  "mandatory_documents": [
+    "GST",
+    "PAN",
+    "MSME",
+    "TURNOVER",
+    "COMPANY_REG"
   ]
-},
-  "mandatory_documents": ["PAN", "MSME"]
-}   
+}
