@@ -11,7 +11,7 @@ from datetime import datetime
 # Regex patterns for each field type
 GSTIN_PATTERN = r"\b[0-9]{2}\s?[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\s?[1-9A-Z]{1}\s?Z\s?[0-9A-Z]{1}\b"
 PAN_PATTERN = r"\b[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\b"
-UDYAM_PATTERN = r"\bUDYAM[-.]?[A-Z]{2}[-.]?[0-9]{2}[-.]?[0-9]{7}\b"
+UDYAM_PATTERN = r"\bUDYAM[-.\s]*[A-Z]{2}[-.\s]*[0-9]{2}[-.\s]*[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
 
 # Words that should never be treated as part of a person's name, even if
@@ -155,9 +155,7 @@ def extract_fields(text: str, doc_type: str) -> dict:
         udyam_match = re.search(UDYAM_PATTERN, text)
         if udyam_match:
             raw = udyam_match.group()
-            # Normalize OCR punctuation confusion (., missing separators)
-            # back into the canonical UDYAM-XX-00-0000000 format
-            digits_letters = re.sub(r"[^A-Z0-9]", "", raw)  # strip all separators
+            digits_letters = re.sub(r"[^A-Z0-9]", "", raw)  # strips spaces, dots, dashes
             if digits_letters.startswith("UDYAM") and len(digits_letters) == 16:
                 fields["udyam_number"] = (
                     f"UDYAM-{digits_letters[5:7]}-{digits_letters[7:9]}-{digits_letters[9:]}"
