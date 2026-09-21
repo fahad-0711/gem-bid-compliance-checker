@@ -15,12 +15,6 @@
         "field": "expiry_date",
         "type": "expiry_check",
         "error": "GST certificate has expired"
-      },
-      {
-        "field": "business_name",
-        "type": "cross_match",
-        "match_against": "PAN.holder_name",
-        "error": "Business name does not match PAN"
       }
     ]
   },

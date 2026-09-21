@@ -1,14 +1,13 @@
 [
-  {
-    "gstin": "27ABCPL1234F1Z5",
-    "business_name": "Bharat Enterprises Pvt Ltd",
-    "status": "Active",
-    "registered_date": "10-Jan-2020"
-  },
-  {
-    "gstin": "29XYZTR5678K1Z9",
-    "business_name": "Sunrise Traders Pvt Ltd",
-    "status": "Active",
-    "registered_date": "05-Jun-2019"
-  }
+  {"gstin": "21ABCDE1234F1Z5", "business_name": "Aarav Digital Solutions Pvt. Ltd.", "status": "Active"},
+  {"gstin": "21FGHJI5678K1Z3", "business_name": "BrightPath Technologies", "status": "Active"},
+  {"gstin": "21LMNOP7890Q1ZA", "business_name": "GreenField Engineering Services", "status": "Active"},
+  {"gstin": "21QRSTU2345L1Z1", "business_name": "Nova Facility Management", "status": "Active"},
+  {"gstin": "21VWXYZ6789M1Z7", "business_name": "Skyline Mechanical Works", "status": "Active"},
+  {"gstin": "21BCDE3456G1Z9", "business_name": "Sunrise Infrastructure Ltd.", "status": "Active"},
+  {"gstin": "21HIJKL9012P1ZC", "business_name": "Vertex Solutions Pvt. Ltd.", "status": "Active"},
+  {"gstin": "21MNOP3456R1ZE", "business_name": "Bluewave Logistics Pvt. Ltd.", "status": "Active"},
+  {"gstin": "21QRST6789T1ZG", "business_name": "Evergreen Agro Tech Pvt. Ltd.", "status": "Active"},
+  {"gstin": "21UVWXY1234Z1ZI", "business_name": "Future Innovations Ltd.", "status": "Active"},
+  {"gstin": "27ABCPL1234F1Z5", "business_name": "Bharat Enterprises Pvt Ltd", "status": "Active"}
 ]

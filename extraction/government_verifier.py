@@ -9,88 +9,260 @@ import json
 import os
 from rapidfuzz import fuzz
 
-REGISTRY_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "mock_registry")
 
+REGISTRY_DIR = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "data",
+    "mock_registry"
+)
+
+
+# ---------------------------------------------------------
+# Registry files for each document type
+# ---------------------------------------------------------
 REGISTRY_FILES = {
     "GST": "gst_registry.json",
     "PAN": "pan_registry.json",
     "MSME": "msme_registry.json",
+    "TURNOVER": "turnover_registry.json",
+    "COMPANY_REG": "company_reg_registry.json",
 }
 
+
+# ---------------------------------------------------------
+# ID field used to search each registry
+# ---------------------------------------------------------
 ID_FIELD_BY_TYPE = {
     "GST": "gstin",
     "PAN": "pan_number",
     "MSME": "udyam_number",
+    "TURNOVER": "certificate_number",
+    "COMPANY_REG": "registration_number",
 }
 
 
+# ---------------------------------------------------------
+# Possible name fields across all document types
+# ---------------------------------------------------------
+NAME_FIELD_CANDIDATES = [
+    "business_name",
+    "holder_name",
+    "enterprise_name",
+    "company_name"
+]
+
+
 def _load_registry(doc_type: str) -> list:
+    """
+    Loads the mock registry JSON file for the given document type.
+    """
+
     filename = REGISTRY_FILES.get(doc_type)
+
     if not filename:
         return []
+
     path = os.path.join(REGISTRY_DIR, filename)
+
     if not os.path.exists(path):
         return []
+
     with open(path, "r") as f:
         return json.load(f)
 
 
+def _get_name_from_fields(fields: dict) -> str | None:
+    """
+    Finds whichever name-like field is present in the extracted fields.
+    """
+
+    for field_name in NAME_FIELD_CANDIDATES:
+        if fields.get(field_name):
+            return fields[field_name]
+
+    return None
+
+
+def _get_name_field_in_record(record: dict) -> str | None:
+    """
+    Finds which name-like field exists in a registry record.
+    """
+
+    for field_name in NAME_FIELD_CANDIDATES:
+        if field_name in record:
+            return field_name
+
+    return None
+
+
 def verify_against_government_records(doc_type: str, fields: dict) -> dict:
+    """
+    Checks extracted fields against the mock government registry.
+
+    Returns:
+    {
+        "verified": bool,
+        "status": "Verified" | "Not Found" | "Mismatch" | "Not Checked",
+        "detail": str
+    }
+    """
+
+    # ---------------------------------------------------------
+    # 1. Find the ID field for the document type
+    # ---------------------------------------------------------
     id_field = ID_FIELD_BY_TYPE.get(doc_type)
+
     if not id_field:
-        return {"verified": False, "status": "Not Checked",
-                "detail": f"No government registry available for {doc_type}"}
+        return {
+            "verified": False,
+            "status": "Not Checked",
+            "detail": f"No government registry available for {doc_type}"
+        }
 
+    # ---------------------------------------------------------
+    # 2. Get extracted document ID
+    # ---------------------------------------------------------
     extracted_id = fields.get(id_field)
+
     if not extracted_id:
-        return {"verified": False, "status": "Not Checked",
-                "detail": f"No {id_field} was extracted to verify"}
+        return {
+            "verified": False,
+            "status": "Not Checked",
+            "detail": f"No {id_field} was extracted to verify"
+        }
 
+    # ---------------------------------------------------------
+    # 3. Load registry
+    # ---------------------------------------------------------
     registry = _load_registry(doc_type)
-    extracted_id_clean = extracted_id.replace(" ", "").upper()
 
+    extracted_id_clean = (
+        extracted_id
+        .replace(" ", "")
+        .upper()
+    )
+
+    # ---------------------------------------------------------
+    # 4. Find records with matching ID
+    # ---------------------------------------------------------
     matching_id_records = [
-        r for r in registry
-        if r.get(id_field, "").replace(" ", "").upper() == extracted_id_clean
+        record
+        for record in registry
+        if record.get(id_field, "")
+        .replace(" ", "")
+        .upper() == extracted_id_clean
     ]
 
+    # ---------------------------------------------------------
+    # 5. ID not found
+    # ---------------------------------------------------------
     if not matching_id_records:
         return {
             "verified": False,
             "status": "Not Found",
-            "detail": f"No matching {id_field.upper()} found in government records"
+            "detail": (
+                f"No matching {id_field.upper()} "
+                f"found in government records"
+            )
         }
 
-    extracted_name = fields.get("business_name") or fields.get("holder_name")
+    # ---------------------------------------------------------
+    # 6. Get extracted name
+    #
+    # Supports:
+    # business_name
+    # holder_name
+    # enterprise_name
+    # company_name
+    # ---------------------------------------------------------
+    extracted_name = (
+        fields.get("business_name")
+        or fields.get("holder_name")
+        or fields.get("enterprise_name")
+        or fields.get("company_name")
+    )
 
+    # ---------------------------------------------------------
+    # 7. Compare name with registry record
+    # ---------------------------------------------------------
     if extracted_name:
+
         best_match = None
+        best_name_field = None
         best_similarity = 0
+
         for record in matching_id_records:
-            name_field = "business_name" if "business_name" in record else "holder_name"
+
+            # Find whichever name field exists in this record
+            name_field = next(
+                (
+                    field
+                    for field in [
+                        "business_name",
+                        "holder_name",
+                        "enterprise_name",
+                        "company_name"
+                    ]
+                    if field in record
+                ),
+                None
+            )
+
+            if not name_field:
+                continue
+
             record_name = record.get(name_field, "")
-            similarity = fuzz.token_sort_ratio(extracted_name.lower(), record_name.lower())
+
+            similarity = fuzz.token_sort_ratio(
+                extracted_name.lower(),
+                record_name.lower()
+            )
+
             if similarity > best_similarity:
                 best_similarity = similarity
                 best_match = record
+                best_name_field = name_field
 
-        if best_similarity >= 85:
-            name_field = "business_name" if "business_name" in best_match else "holder_name"
+        # -----------------------------------------------------
+        # 8. Name matches
+        # -----------------------------------------------------
+        if best_similarity >= 85 and best_match:
+
             return {
                 "verified": True,
                 "status": "Verified",
-                "detail": f"Matches government record: {best_match[name_field]} ({best_match.get('status', 'Active')})"
+                "detail": (
+                    f"Matches government record: "
+                    f"{best_match[best_name_field]} "
+                    f"({best_match.get('status', 'Active')})"
+                )
             }
+
+        # -----------------------------------------------------
+        # 9. ID exists but name does not match
+        # -----------------------------------------------------
         else:
+
             return {
                 "verified": False,
                 "status": "Mismatch",
-                "detail": f"{id_field.upper()} found in records, but no matching name among "
-                          f"{len(matching_id_records)} record(s) with this ID"
+                "detail": (
+                    f"{id_field.upper()} found in records, "
+                    f"but no matching name among "
+                    f"{len(matching_id_records)} record(s) "
+                    f"with this ID"
+                )
             }
 
+    # ---------------------------------------------------------
+    # 10. ID matched but no name was extracted
+    # ---------------------------------------------------------
     return {
         "verified": True,
         "status": "Verified",
-        "detail": f"Matches government record ({matching_id_records[0].get('status', 'Active')})"
+        "detail": (
+            f"Matches government record "
+            f"({matching_id_records[0].get('status', 'Active')})"
+        )
     }
