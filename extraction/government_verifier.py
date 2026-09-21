@@ -36,15 +36,6 @@ def _load_registry(doc_type: str) -> list:
 
 
 def verify_against_government_records(doc_type: str, fields: dict) -> dict:
-    """
-    Checks extracted fields against the mock government registry.
-    Returns a dict describing the verification outcome:
-    {
-        "verified": bool,
-        "status": "Verified" | "Not Found" | "Mismatch" | "Not Checked",
-        "detail": str
-    }
-    """
     id_field = ID_FIELD_BY_TYPE.get(doc_type)
     if not id_field:
         return {"verified": False, "status": "Not Checked",
@@ -58,37 +49,48 @@ def verify_against_government_records(doc_type: str, fields: dict) -> dict:
     registry = _load_registry(doc_type)
     extracted_id_clean = extracted_id.replace(" ", "").upper()
 
-    for record in registry:
-        record_id = record.get(id_field, "").replace(" ", "").upper()
-        if record_id == extracted_id_clean:
-            # ID matches a record — now check the name field also matches
-            name_field = "business_name" if "business_name" in record else "holder_name"
-            extracted_name = fields.get(name_field) or fields.get("business_name") or fields.get("holder_name")
-            record_name = record.get(name_field, "")
+    matching_id_records = [
+        r for r in registry
+        if r.get(id_field, "").replace(" ", "").upper() == extracted_id_clean
+    ]
 
-            if extracted_name:
-                similarity = fuzz.token_sort_ratio(extracted_name.lower(), record_name.lower())
-                if similarity >= 85:
-                    return {
-                        "verified": True,
-                        "status": "Verified",
-                        "detail": f"Matches government record: {record_name} ({record.get('status', 'Active')})"
-                    }
-                else:
-                    return {
-                        "verified": False,
-                        "status": "Mismatch",
-                        "detail": f"{id_field.upper()} found in records, but name doesn't match "
-                                 f"(record shows '{record_name}')"
-                    }
+    if not matching_id_records:
+        return {
+            "verified": False,
+            "status": "Not Found",
+            "detail": f"No matching {id_field.upper()} found in government records"
+        }
+
+    extracted_name = fields.get("business_name") or fields.get("holder_name")
+
+    if extracted_name:
+        best_match = None
+        best_similarity = 0
+        for record in matching_id_records:
+            name_field = "business_name" if "business_name" in record else "holder_name"
+            record_name = record.get(name_field, "")
+            similarity = fuzz.token_sort_ratio(extracted_name.lower(), record_name.lower())
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match = record
+
+        if best_similarity >= 85:
+            name_field = "business_name" if "business_name" in best_match else "holder_name"
             return {
                 "verified": True,
                 "status": "Verified",
-                "detail": f"Matches government record ({record.get('status', 'Active')})"
+                "detail": f"Matches government record: {best_match[name_field]} ({best_match.get('status', 'Active')})"
+            }
+        else:
+            return {
+                "verified": False,
+                "status": "Mismatch",
+                "detail": f"{id_field.upper()} found in records, but no matching name among "
+                          f"{len(matching_id_records)} record(s) with this ID"
             }
 
     return {
-        "verified": False,
-        "status": "Not Found",
-        "detail": f"No matching {id_field.upper()} found in government records"
+        "verified": True,
+        "status": "Verified",
+        "detail": f"Matches government record ({matching_id_records[0].get('status', 'Active')})"
     }
