@@ -13,8 +13,8 @@ GSTIN_PATTERN = r"\b[0-9]{2}\s?[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\s?[1-9A-Z]{1}\s?Z\
 PAN_PATTERN = r"\b[A-Z]{5}\s?[0-9]{4}\s?[A-Z]{1}\b"
 UDYAM_PATTERN = r"\bUDYAM[-.\s]*[A-Z]{2}[-.\s]*[0-9]{2}[-.\s]*[0-9]{7}\b"
 DATE_PATTERN = r"\b\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4}\b"
-TURNOVER_CERT_PATTERN = r"\bDEMO-TURN-\d{4}\b"
-COMPANY_REG_PATTERN = r"\bSAMPLE-COMP-\d{3}\b"
+TURNOVER_CERT_PATTERN = r"\b(?:DEMO-TURN-\d{4}|TC/\d{4}/\d{4})\b"
+COMPANY_REG_PATTERN = r"\b(?:SAMPLE-COMP-\d{3}|[A-Z]{2}/[A-Z]+/\d{4}/\d{5})\b"
 
 # Words that should never be treated as part of a person's name, even if
 # they happen to be capitalized cleanly by OCR (e.g. "Date", "Signature").
@@ -39,7 +39,9 @@ def detect_doc_type(text: str) -> str:
     lower = text.lower()
     if "turnover certificate" in lower or re.search(TURNOVER_CERT_PATTERN, text):
         return "TURNOVER"
-    if "company registration certificate" in lower or re.search(COMPANY_REG_PATTERN, text):
+    if ("company registration certificate" in lower
+        or "business registration certificate" in lower
+        or re.search(COMPANY_REG_PATTERN, text)):
         return "COMPANY_REG"
     if "goods and services tax" in lower or "gstin" in lower or "gst registration" in lower:
         return "GST"
@@ -205,16 +207,22 @@ def extract_fields(text: str, doc_type: str) -> dict:
         cert_match = re.search(TURNOVER_CERT_PATTERN, text)
         fields["certificate_number"] = cert_match.group() if cert_match else None
 
-        name_match = re.search(r"Enterprise Name\s*:?\s*(.+)", text)
+        name_match = re.search(
+            r"(?:Enterprise Name|Business Name)\s*:?\s*(.+?)"
+            r"(?=\s+(?:Financial Year|Annual Turnover|Certificate Number|PAN of Business|\n)|$)",
+            text, re.IGNORECASE
+        )
         fields["enterprise_name"] = name_match.group(1).strip() if name_match else None
 
     elif doc_type == "COMPANY_REG":
         reg_match = re.search(COMPANY_REG_PATTERN, text)
         fields["registration_number"] = reg_match.group() if reg_match else None
 
-        name_match = re.search(r"Company Name\s*:?\s*(.+)", text)
+        name_match = re.search(
+            r"(?:Company Name|Business Name)\s*:?\s*(.+?)(?=\s+(?:Proprietor Name|Registration Number|Type of Company|Nature of Business|Registered Address|\n)|$)",
+            text, re.IGNORECASE
+        )
         fields["company_name"] = name_match.group(1).strip() if name_match else None
-
     elif doc_type == "MSME":
         udyam_match = re.search(UDYAM_PATTERN, text)
         if udyam_match:
@@ -228,7 +236,9 @@ def extract_fields(text: str, doc_type: str) -> dict:
                 fields["udyam_number"] = raw
         else:
             fields["udyam_number"] = None
-        
+
+        name_match = re.search(r"NAME OF ENTERPRISE\s*:?\s*(.+)", text, re.IGNORECASE)
+        fields["business_name"] = name_match.group(1).strip() if name_match else None
 
     return fields
 
