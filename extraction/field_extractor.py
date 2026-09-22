@@ -223,6 +223,7 @@ def extract_fields(text: str, doc_type: str) -> dict:
             text, re.IGNORECASE
         )
         fields["company_name"] = name_match.group(1).strip() if name_match else None
+
     elif doc_type == "MSME":
         udyam_match = re.search(UDYAM_PATTERN, text)
         if udyam_match:
@@ -237,8 +238,21 @@ def extract_fields(text: str, doc_type: str) -> dict:
         else:
             fields["udyam_number"] = None
 
-        name_match = re.search(r"NAME OF ENTERPRISE\s*:?\s*(.+)", text, re.IGNORECASE)
-        fields["business_name"] = name_match.group(1).strip() if name_match else None
+        # Real-world Udyam certificates often separate all labels from all
+        # values (OCR reads them as two blocks). The enterprise name
+        # reliably appears as the first word(s) right after the Udyam
+        # number itself, before the enterprise category (Micro/Small/Medium).
+        business_name = None
+        if udyam_match:
+            after_udyam = text[udyam_match.end():].strip()
+            fallback_match = re.match(
+                r"([A-Za-z][A-Za-z\s.]{2,40}?)(?=\s+(?:Micro|Small|Medium)\b)",
+                after_udyam
+            )
+            if fallback_match:
+                business_name = fallback_match.group(1).strip()
+
+        fields["business_name"] = business_name
 
     return fields
 
