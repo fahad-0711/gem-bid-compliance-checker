@@ -9,3 +9,4 @@ reports/*.xlsx
 *.ipynb_checkpoints
 rules/backups/
 data/sample_docs/PAN_Card.png
+**/~$*

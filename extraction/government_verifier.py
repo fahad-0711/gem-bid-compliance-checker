@@ -7,6 +7,7 @@ mock registry records — no real/confidential government data is used.
 
 import json
 import os
+import re
 from rapidfuzz import fuzz
 
 
@@ -51,6 +52,37 @@ NAME_FIELD_CANDIDATES = [
     "enterprise_name",
     "company_name"
 ]
+
+
+# ---------------------------------------------------------
+# Legal-suffix / punctuation noise stripped before comparing names
+# ---------------------------------------------------------
+_LEGAL_SUFFIXES = [
+    r'\bpvt\b', r'\bprivate\b', r'\bltd\b', r'\blimited\b',
+    r'\bllp\b', r'\binc\b', r'\bcorp\b', r'\bcorporation\b',
+    r'\benterprises\b', r'\btechnologies\b', r'\bsolutions\b',
+]
+
+
+def normalize_business_name(name: str) -> str:
+    """
+    Lowercases, strips punctuation, removes common legal suffixes, and
+    collapses whitespace so that names like 'Aarav Digital Solutions
+    Pvt. Ltd.' and 'ARAAV DIGITAL SOLUTIONS PRIVATE LIMITED' compare equal.
+    """
+
+    if not name:
+        return ""
+
+    normalized = name.lower()
+    normalized = re.sub(r'[.,]', '', normalized)
+
+    for suffix in _LEGAL_SUFFIXES:
+        normalized = re.sub(suffix, '', normalized)
+
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+    return normalized
 
 
 def _load_registry(doc_type: str) -> list:
@@ -192,6 +224,8 @@ def verify_against_government_records(doc_type: str, fields: dict) -> dict:
         best_name_field = None
         best_similarity = 0
 
+        normalized_extracted = normalize_business_name(extracted_name)
+
         for record in matching_id_records:
 
             # Find whichever name field exists in this record
@@ -213,10 +247,11 @@ def verify_against_government_records(doc_type: str, fields: dict) -> dict:
                 continue
 
             record_name = record.get(name_field, "")
-
-            similarity = fuzz.token_sort_ratio(
-                extracted_name.lower(),
-                record_name.lower()
+            normalized_record = normalize_business_name(record_name)
+            print(f"DEBUG — extracted: {normalized_extracted!r} | registry: {normalized_record!r}")
+            similarity = fuzz.token_set_ratio(
+                normalized_extracted,
+                normalized_record
             )
 
             if similarity > best_similarity:
@@ -227,7 +262,7 @@ def verify_against_government_records(doc_type: str, fields: dict) -> dict:
         # -----------------------------------------------------
         # 8. Name matches
         # -----------------------------------------------------
-        if best_similarity >= 85 and best_match:
+        if best_similarity >= 80 and best_match:
 
             return {
                 "verified": True,
@@ -251,7 +286,7 @@ def verify_against_government_records(doc_type: str, fields: dict) -> dict:
                     f"{id_field.upper()} found in records, "
                     f"but no matching name among "
                     f"{len(matching_id_records)} record(s) "
-                    f"with this ID"
+                    f"with this ID (best similarity: {best_similarity}%)"
                 )
             }
 

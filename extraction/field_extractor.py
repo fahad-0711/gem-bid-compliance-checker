@@ -136,6 +136,39 @@ def _extract_name_after_label(text, label_pattern, exclude_terms=("father", "प
         # occurrences of the label rather than returning garbage
 
     return None
+# Labels that can appear after the business name on a GST certificate.
+# Used to bound the greedy capture so it stops before running into
+# unrelated fields -- critical for OCR text, which has no newlines.
+_GST_NAME_STOP_LABELS = [
+    "GSTIN", "Registered Address", "Address", "Authorized Signatory",
+    "Signature", "Period of Validity", "Date of Issue",
+    "State Jurisdiction", "Center Jurisdiction", "Centre Jurisdiction",
+    "Type of Registration", "Constitution of Business", "Trade Name",
+]
+
+
+def _extract_business_name_gst(text: str) -> str | None:
+    label_match = re.search(r"Legal Name(?:\s+of\s+Business)?\s*:?\s*", text, re.IGNORECASE)
+    if not label_match:
+        return None
+
+    remainder = text[label_match.end():]
+    end = len(remainder)
+
+    newline_pos = remainder.find("\n")
+    if newline_pos != -1:
+        end = min(end, newline_pos)
+
+    for label in _GST_NAME_STOP_LABELS:
+        label_pos = remainder.lower().find(label.lower())
+        if label_pos != -1:
+            end = min(end, label_pos)
+
+    MAX_NAME_LENGTH = 80
+    end = min(end, MAX_NAME_LENGTH)
+
+    candidate = remainder[:end].strip(" :\n\t.-")
+    return candidate if candidate else None
 
 def extract_fields(text: str, doc_type: str) -> dict:
     """Pulls out the fields relevant to a given document type."""
@@ -147,8 +180,7 @@ def extract_fields(text: str, doc_type: str) -> dict:
 
         # Real certificates use "Legal Name" (sometimes numbered "2. Legal Name"),
         # our own dummy PDFs use "Legal Name of Business" — match either.
-        name_match = re.search(r"Legal Name(?:\s+of\s+Business)?\s*:?\s*(.+)", text, re.IGNORECASE)
-        fields["business_name"] = name_match.group(1).strip() if name_match else None
+        fields["business_name"] = _extract_business_name_gst(text)
 
         # Real certificates often say "Period of Validity From <date> to Regular"
         # meaning indefinite validity, not a fixed expiry date. Only treat it as
