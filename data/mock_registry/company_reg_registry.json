@@ -1,12 +1,12 @@
 [
-  {"registration_number": "SAMPLE-COMP-001", "company_name": "Aarav Digital Solutions Pvt. Ltd.", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-002", "company_name": "BrightPath Technologies", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-003", "company_name": "GreenField Engineering Services", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-004", "company_name": "Nova Facility Management", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-005", "company_name": "Skyline Mechanical Works", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-006", "company_name": "Sunrise Infrastructure Ltd.", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-007", "company_name": "Vertex Solutions Pvt. Ltd.", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-008", "company_name": "Bluewave Logistics Pvt. Ltd.", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-009", "company_name": "Evergreen Agro Tech Pvt. Ltd.", "status": "Active"},
-  {"registration_number": "SAMPLE-COMP-010", "company_name": "Future Innovations Ltd.", "status": "Active"}
+  {"registration_number": "TS/PROP/2020/00101", "company_name": "Rohit Kumar Sharma", "status": "Active"},
+  {"registration_number": "TS/PROP/2021/00102", "company_name": "Priya Singh", "status": "Active"},
+  {"registration_number": "TS/PROP/2022/00103", "company_name": "Ankit Verma", "status": "Active"},
+  {"registration_number": "TS/PROP/2023/00104", "company_name": "Sneha Reddy", "status": "Active"},
+  {"registration_number": "TS/PROP/2019/00105", "company_name": "Amit Patel", "status": "Active"},
+  {"registration_number": "TS/PROP/2020/00106", "company_name": "Neha Gupta", "status": "Active"},
+  {"registration_number": "TS/PROP/2021/00107", "company_name": "Vikram Yadav", "status": "Active"},
+  {"registration_number": "TS/PROP/2022/00108", "company_name": "Pooja Mishra", "status": "Active"},
+  {"registration_number": "TS/PROP/2023/00109", "company_name": "Rahul Singh", "status": "Active"},
+  {"registration_number": "TS/PROP/2019/00110", "company_name": "Anjali Kumari", "status": "Active"}
 ]
