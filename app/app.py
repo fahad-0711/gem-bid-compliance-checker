@@ -4,6 +4,8 @@ Upload bid documents -> see extraction + rule validation results instantly.
 Also tracks compliance history across checks for an Insights view,
 and allows editing compliance rules without touching code.
 """
+from login_page import require_login
+require_login()
 
 import sys
 import os
