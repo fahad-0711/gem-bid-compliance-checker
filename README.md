@@ -13,7 +13,7 @@ instant pass/fail report with reasons — reducing manual review time from ~30 m
 under a minute per bid.
 
 ## Live Demo
-🔗 [Add your Streamlit Cloud link here once deployed]
+🔗 https://drive.google.com/file/d/1h1bV-duReCz9v8J0KjbEAU5dt7Y-N7a5/view?usp=sharing
 
 ## Architecture
 ![Architecture](docs/architecture.png)
